@@ -162,51 +162,52 @@ class CompletionChecker {
     };
   }
 
-  /**
-   * Verificar documentación
-   * @param {Object} property - Datos de la propiedad
-   * @returns {Promise<Object>} Estado de documentación
-   */
-  async checkDocumentationFields(property) {
-    const requiredDocs = this.requiredFields.documentation;
-    const issues = [];
-    
-    // Verificar documentos obligatorios
-    for (const docField of requiredDocs) {
-      if (docField === 'fotos_inmueble') {
-        const photosCount = property.fotos_inmueble || 0;
-        if (photosCount < this.validationConfig.minPhotos) {
-          issues.push(`Faltan fotos: ${photosCount}/${this.validationConfig.minPhotos} mínimo`);
-        }
-      } else {
-        if (!property[docField]) {
-          issues.push(`Falta documento: ${this.getFieldLabel(docField)}`);
-        }
+ /**
+ * Verificar documentación
+ * @param {Object} property - Datos de la propiedad
+ * @returns {Promise<Object>} Estado de documentación
+ */
+async checkDocumentationFields(property) {
+  const requiredDocs = this.requiredFields.documentation;
+  const issues = [];
+  
+  // Verificar documentos obligatorios
+  for (const docField of requiredDocs) {
+    if (docField === 'fotos_inmueble') {
+      const photosCount = property.fotos_inmueble || 0;
+      if (photosCount < this.validation.minPhotos) {
+        issues.push(`Faltan fotos: ${photosCount}/${this.validation.minPhotos} mínimo`);
+      }
+    } else {
+      if (!property[docField]) {
+        issues.push(`Falta documento: ${this.getFieldLabel(docField)}`);
       }
     }
-
-    // Verificar criterio de documentos mínimos
-    const documentsReceived = requiredDocs.filter(doc => {
-      if (doc === 'fotos_inmueble') {
-        return (property.fotos_inmueble || 0) >= this.validationConfig.minPhotos;
-      }
-      return property[doc];
-    }).length;
-
-    if (documentsReceived < this.validationConfig.minDocuments) {
-        issues.push(`Documentos insuficientes: ${documentsReceived}/${this.validationConfig.minDocuments} mínimo`);
-    }
- 
-    return {
-      isComplete: issues.length === 0,
-      required: requiredDocs.length,
-      completed: documentsReceived,
-      issues,
-      percentage: Math.round((documentsReceived / requiredDocs.length) * 100),
-      documentsReceived,
-      minRequired: this.validationConfig.minDocuments
-    };
   }
+
+  // Verificar criterio de documentos mínimos
+  const documentsReceived = requiredDocs.filter(doc => {
+    if (doc === 'fotos_inmueble') {
+      return (property.fotos_inmueble || 0) >= this.validation.minPhotos;
+    }
+    return property[doc];
+  }).length;
+
+  // FIX: usar this.validation en lugar de this.validationConfig
+  if (documentsReceived < this.validation.minDocuments) {
+    issues.push(`Documentos insuficientes: ${documentsReceived}/${this.validation.minDocuments} mínimo`);
+  }
+
+  return {
+    isComplete: issues.length === 0,
+    required: requiredDocs.length,
+    completed: documentsReceived,
+    issues,
+    percentage: Math.round((documentsReceived / requiredDocs.length) * 100),
+    documentsReceived,
+    minRequired: this.validation.minDocuments
+  };
+}
  
   /**
    * Verificar campos de descripción

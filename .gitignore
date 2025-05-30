@@ -78,3 +78,5 @@ prisma/migrations/
 venv/
 
 creds.json
+
+test-weaviate.js

@@ -9,18 +9,21 @@ import { ERROR_CODES } from '../utils/constants.js';
 
 class SheetsService {
   constructor() {
-    this.serviceAccountEmail = googleSheets.serviceAccountEmail;
-    this.privateKey = googleSheets.privateKey;
+    this.credentials = googleSheets.credentials;
     this.spreadsheetId = googleSheets.spreadsheetId;
     this.sheetName = googleSheets.sheetName;
     
-    // Inicializar cliente de autenticación
-    this.auth = new google.auth.JWT(
-      this.serviceAccountEmail,
-      null,
-      this.privateKey,
-      ['https://www.googleapis.com/auth/spreadsheets']
-    );
+    // Verificar que las credenciales estén disponibles
+    if (!this.credentials) {
+      logger.error('Credenciales de Google Sheets no disponibles');
+      throw new Error('Credenciales de Google Sheets no configuradas');
+    }
+    
+    // Inicializar cliente de autenticación usando las credenciales del archivo JSON
+    this.auth = new google.auth.GoogleAuth({
+      credentials: this.credentials,
+      scopes: ['https://www.googleapis.com/auth/spreadsheets']
+    });
     
     // Cliente de Google Sheets
     this.sheets = google.sheets({ version: 'v4', auth: this.auth });
@@ -380,99 +383,21 @@ class SheetsService {
  }
 
  /**
-  * Obtener todas las propiedades exportadas
-  * @returns {Promise<Array>} Lista de propiedades
+  * Verificar conectividad con Google Sheets
+  * @returns {Promise<boolean>} Estado de conexión
   */
- async getExportedProperties() {
+ async checkConnection() {
    try {
-     const range = `${this.sheetName}!A2:Z`;
-     const response = await this.sheets.spreadsheets.values.get({
+     await this.sheets.spreadsheets.get({
        spreadsheetId: this.spreadsheetId,
-       range: range
+       fields: 'spreadsheetId,properties.title'
      });
 
-     const values = response.data.values || [];
-     
-     return values.map((row, index) => ({
-       row: index + 2,
-       id: row[0],
-       fechaCompletado: row[1],
-       nombre: row[2],
-       apellido: row[3],
-       direccion: row[10],
-       tipoPropiedad: row[12],
-       precio: row[21],
-       estado: row[37]
-     }));
-
+     logger.info('Conexión con Google Sheets verificada exitosamente');
+     return true;
    } catch (error) {
-     logger.error('Error al obtener propiedades exportadas:', error);
-     return [];
-   }
- }
-
- /**
-  * Buscar propiedad por ID en la hoja
-  * @param {string} propertyId - ID de la propiedad
-  * @returns {Promise<Object|null>} Datos de la propiedad o null
-  */
- async findPropertyById(propertyId) {
-   try {
-     const properties = await this.getExportedProperties();
-     return properties.find(prop => prop.id === propertyId) || null;
-   } catch (error) {
-     logger.error('Error al buscar propiedad por ID:', error);
-     return null;
-   }
- }
-
- /**
-  * Actualizar una propiedad existente en la hoja
-  * @param {string} propertyId - ID de la propiedad
-  * @param {Object} updatedData - Datos actualizados
-  * @returns {Promise<Object>} Resultado de la actualización
-  */
- async updatePropertyData(propertyId, updatedData) {
-   try {
-     const existingProperty = await this.findPropertyById(propertyId);
-     
-     if (!existingProperty) {
-       throw new Error('Propiedad no encontrada en la hoja');
-     }
-
-     const rowData = this.prepareRowData(updatedData);
-     const range = `${this.sheetName}!A${existingProperty.row}:Z${existingProperty.row}`;
-
-     await this.sheets.spreadsheets.values.update({
-       spreadsheetId: this.spreadsheetId,
-       range: range,
-       valueInputOption: 'USER_ENTERED',
-       requestBody: {
-         values: [rowData]
-       }
-     });
-
-     logger.info('Propiedad actualizada exitosamente en Google Sheets', {
-       propertyId,
-       row: existingProperty.row
-     });
-
-     return {
-       success: true,
-       row: existingProperty.row,
-       propertyId
-     };
-
-   } catch (error) {
-     logger.error('Error al actualizar propiedad en Google Sheets:', {
-       propertyId,
-       error: error.message
-     });
-
-     return {
-       success: false,
-       error: error.message
-     };
+     logger.error('Error de conexión con Google Sheets:', error);
+     return false;
    }
  }
 
@@ -521,59 +446,34 @@ class SheetsService {
  }
 
  /**
-  * Verificar conectividad con Google Sheets
-  * @returns {Promise<boolean>} Estado de conexión
+  * Obtener todas las propiedades exportadas
+  * @returns {Promise<Array>} Lista de propiedades
   */
- async checkConnection() {
+ async getExportedProperties() {
    try {
-     await this.sheets.spreadsheets.get({
+     const range = `${this.sheetName}!A2:Z`;
+     const response = await this.sheets.spreadsheets.values.get({
        spreadsheetId: this.spreadsheetId,
-       fields: 'spreadsheetId,properties.title'
+       range: range
      });
 
-     logger.info('Conexión con Google Sheets verificada exitosamente');
-     return true;
-   } catch (error) {
-     logger.error('Error de conexión con Google Sheets:', error);
-     return false;
-   }
- }
-
- /**
-  * Crear una nueva hoja de backup
-  * @returns {Promise<Object>} Resultado de la creación
-  */
- async createBackupSheet() {
-   try {
-     const backupSheetName = `${this.sheetName}_Backup_${new Date().toISOString().split('T')[0]}`;
+     const values = response.data.values || [];
      
-     await this.sheets.spreadsheets.batchUpdate({
-       spreadsheetId: this.spreadsheetId,
-       requestBody: {
-         requests: [{
-           duplicateSheet: {
-             sourceSheetId: await this.getSheetId(),
-             newSheetName: backupSheetName
-           }
-         }]
-       }
-     });
-
-     logger.info('Hoja de backup creada exitosamente', {
-       backupSheetName
-     });
-
-     return {
-       success: true,
-       backupSheetName
-     };
+     return values.map((row, index) => ({
+       row: index + 2,
+       id: row[0],
+       fechaCompletado: row[1],
+       nombre: row[2],
+       apellido: row[3],
+       direccion: row[10],
+       tipoPropiedad: row[12],
+       precio: row[21],
+       estado: row[37]
+     }));
 
    } catch (error) {
-     logger.error('Error al crear hoja de backup:', error);
-     return {
-       success: false,
-       error: error.message
-     };
+     logger.error('Error al obtener propiedades exportadas:', error);
+     return [];
    }
  }
 }

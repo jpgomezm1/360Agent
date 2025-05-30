@@ -5,11 +5,21 @@
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { readFileSync } from 'fs';
 
 // Configurar dotenv
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 dotenv.config({ path: join(__dirname, '../../.env') });
+
+// Cargar credenciales de Google Sheets
+let googleCredentials = null;
+try {
+  const credsPath = join(__dirname, '../../creds.json');
+  googleCredentials = JSON.parse(readFileSync(credsPath, 'utf8'));
+} catch (error) {
+  console.warn('No se pudo cargar creds.json:', error.message);
+}
 
 /**
  * Configuración de la base de datos
@@ -82,8 +92,8 @@ export const email = {
  * Configuración de Google Sheets
  */
 export const googleSheets = {
-  serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-  privateKey: process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+  // Usar credenciales desde el archivo JSON
+  credentials: googleCredentials,
   spreadsheetId: process.env.GOOGLE_SHEETS_ID,
   // Nombre de la hoja donde se exportarán los datos
   sheetName: 'Propiedades_Completadas',
@@ -177,13 +187,26 @@ export function validateConfig() {
     'OPENAI_API_KEY',
     'ULTRAMSG_INSTANCE_ID', 'ULTRAMSG_TOKEN',
     'RESEND_API_KEY', 'FROM_EMAIL', 'NOTIFICATION_EMAIL',
-    'GOOGLE_SERVICE_ACCOUNT_EMAIL', 'GOOGLE_PRIVATE_KEY', 'GOOGLE_SHEETS_ID'
+    'GOOGLE_SHEETS_ID'
   ];
 
   const missing = required.filter(key => !process.env[key]);
   
   if (missing.length > 0) {
     throw new Error(`Variables de entorno faltantes: ${missing.join(', ')}`);
+  }
+
+  // Validar que las credenciales de Google estén cargadas
+  if (!googleCredentials) {
+    throw new Error('No se pudieron cargar las credenciales de Google Sheets desde creds.json');
+  }
+
+  // Validar estructura básica de credenciales
+  const requiredGoogleFields = ['client_email', 'private_key', 'project_id'];
+  const missingGoogleFields = requiredGoogleFields.filter(field => !googleCredentials[field]);
+  
+  if (missingGoogleFields.length > 0) {
+    throw new Error(`Campos faltantes en creds.json: ${missingGoogleFields.join(', ')}`);
   }
 }
 
