@@ -1,0 +1,166 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Modelo principal para las propiedades inmobiliarias
+model Property {
+  id                    String   @id @default(uuid())
+  
+  // Datos del formulario inicial (simulado)
+  nombre                String
+  apellido              String
+  tipo_documento        String
+  numero_documento      String
+  pais                  String
+  celular               String
+  email                 String
+  ciudad_inmueble       String
+  direccion_inmueble    String
+  matricula_inmobiliaria String
+  
+  // Características físicas (recopiladas por bot)
+  tipo_propiedad        String?
+  area_construida       Int?
+  habitaciones          Int?
+  banos                 Float?
+  parqueaderos          Int?
+  piso                  Int?
+  estrato               Int?
+  ano_construccion      Int?
+  estado_propiedad      String?
+  
+  // Información comercial
+  precio_venta          BigInt?
+  precio_negociable     Boolean?
+  motivo_venta          String?
+  tiempo_estimado_venta String?
+  acepta_credito        Boolean?
+  deudas_pendientes     String?
+  
+  // Documentación (almacenamos confirmación de recepción)
+  certificado_existencia Boolean @default(false)
+  escritura_publica     Boolean @default(false)
+  paz_salvo_admin       Boolean @default(false)
+  recibo_servicios      Boolean @default(false)
+  certificado_predial   Boolean @default(false)
+  fotos_inmueble        Int     @default(0) // Contador de fotos
+  
+  // Descripción
+  descripcion           String?
+  caracteristicas_especiales String?
+  servicios_incluidos   String?
+  restricciones         String?
+  
+  // Control de estado
+  estado_recoleccion    String   @default("INICIADO") // INICIADO, EN_PROGRESO, COMPLETADO
+  porcentaje_completitud Int     @default(0)
+  
+  // Timestamps
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+  fecha_completado      DateTime?
+  
+  // Relaciones
+  conversaciones        Conversation[]
+  documentos            Document[]
+  
+  @@map("properties")
+}
+
+// Modelo para gestionar conversaciones de WhatsApp
+model Conversation {
+  id              String   @id @default(uuid())
+  property_id     String
+  whatsapp_number String
+  
+  // Estado de la conversación
+  estado          String   @default("ACTIVA") // ACTIVA, COMPLETADA, TIMEOUT
+  ultimo_mensaje  DateTime @default(now())
+  
+  // Contexto de la conversación
+  contexto_actual String?  // JSON con el estado actual de recolección
+  campo_actual    String?  // Campo que se está recolectando actualmente
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  // Relaciones
+  property        Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  mensajes        Message[]
+  
+  @@map("conversations")
+}
+
+// Modelo para almacenar mensajes individuales
+model Message {
+  id              String   @id @default(uuid())
+  conversation_id String
+  
+  // Contenido del mensaje
+  contenido       String
+  tipo            String   // USER, BOT, SYSTEM
+  direccion       String   // ENVIADO, RECIBIDO
+  
+  // Metadata
+  metadata        Json?    // Información adicional (archivos, etc.)
+  procesado       Boolean  @default(false)
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  
+  // Relaciones
+  conversation    Conversation @relation(fields: [conversation_id], references: [id], onDelete: Cascade)
+  
+  @@map("messages")
+}
+
+// Modelo para trackear documentos recibidos
+model Document {
+  id          String   @id @default(uuid())
+  property_id String
+  
+  // Información del documento
+  nombre      String
+  tipo        String   // certificado_existencia, escritura_publica, etc.
+  ruta        String?  // Ruta donde se almacena el archivo
+  tamano      Int?     // Tamaño en bytes
+  
+  // Estado del procesamiento
+  procesado   Boolean  @default(false)
+  ocr_texto   String?  // Texto extraído por OCR
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relaciones
+  property    Property @relation(fields: [property_id], references: [id], onDelete: Cascade)
+  
+  @@map("documents")
+}
+
+// Modelo para auditoria y logs
+model ActivityLog {
+  id          String   @id @default(uuid())
+  
+  // Información de la actividad
+  entidad     String   // Property, Conversation, etc.
+  entidad_id  String
+  accion      String   // CREADO, ACTUALIZADO, COMPLETADO, etc.
+  
+  // Detalles
+  descripcion String?
+  metadata    Json?    // Información adicional
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  
+  @@map("activity_logs")
+}
