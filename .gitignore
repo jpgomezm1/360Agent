@@ -76,3 +76,5 @@ prisma/migrations/
 
 
 venv/
+
+creds.json

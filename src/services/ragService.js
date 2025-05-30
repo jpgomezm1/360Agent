@@ -10,12 +10,13 @@ import { ERROR_CODES } from '../utils/constants.js';
 
 class RAGService {
   constructor() {
-    // Cliente Weaviate
+    // Cliente Weaviate - CONFIGURACIÓN CORREGIDA
     this.weaviateClient = weaviate.client({
       scheme: 'https',
       host: weaviateConfig.url.replace('https://', ''),
       apiKey: weaviateConfig.apiKey,
       headers: {
+        'Authorization': `Bearer ${weaviateConfig.apiKey}`,
         'X-OpenAI-Api-Key': openaiConfig.apiKey
       }
     });
@@ -163,64 +164,64 @@ class RAGService {
       const response = await this.weaviateClient.graphql
         .get()
         .withClassName(this.className)
-       .withFields('content title category tags source _additional { certainty }')
-       .withNearText({ concepts: [query] })
-       .withLimit(limit)
-       .withWhere({
-         path: ['content'],
-         operator: 'isNull',
-         valueBoolean: false
-       })
-       .do();
+        .withFields('content title category tags source _additional { certainty }')
+        .withNearText({ concepts: [query] })
+        .withLimit(limit)
+        .withWhere({
+          path: ['content'],
+          operator: 'isNull',
+          valueBoolean: false
+        })
+        .do();
 
-     const results = response.data?.Get?.[this.className] || [];
-     
-     logger.rag('Búsqueda en base de conocimiento completada', {
-       query,
-       resultsCount: results.length,
-       results: results.map(r => ({ title: r.title, certainty: r._additional?.certainty }))
-     });
+      const results = response.data?.Get?.[this.className] || [];
+      
+      logger.rag('Búsqueda en base de conocimiento completada', {
+        query,
+        resultsCount: results.length,
+        results: results.map(r => ({ title: r.title, certainty: r._additional?.certainty }))
+      });
 
-     return results.map(result => ({
-       content: result.content,
-       title: result.title,
-       category: result.category,
-       tags: result.tags,
-       source: result.source,
-       relevance: result._additional?.certainty || 0
-     }));
+      return results.map(result => ({
+        content: result.content,
+        title: result.title,
+        category: result.category,
+        tags: result.tags,
+        source: result.source,
+        relevance: result._additional?.certainty || 0
+      }));
 
-   } catch (error) {
-     logger.error('Error al buscar en base de conocimiento:', {
-       query,
-       error: error.message
-     });
-     return [];
-   }
- }
+    } catch (error) {
+      logger.error('Error al buscar en base de conocimiento:', {
+        query,
+        error: error.message
+      });
+      return [];
+    }
+  }
 
- /**
-  * Generar respuesta usando RAG
-  * @param {string} userQuestion - Pregunta del usuario
-  * @param {Object} context - Contexto adicional
-  * @returns {Promise<string>} Respuesta generada
-  */
- async generateRAGResponse(userQuestion, context = {}) {
-   try {
-     // 1. Buscar información relevante
-     const relevantDocs = await this.searchKnowledge(userQuestion, 3);
-     
-     if (relevantDocs.length === 0) {
-       return this.getFallbackResponse(userQuestion);
-     }
+  /**
+   * Generar respuesta usando RAG
+   * @param {string} userQuestion - Pregunta del usuario
+   * @param {Object} context - Contexto adicional
+   * @returns {Promise<string>} Respuesta generada
+   */
+  async generateRAGResponse(userQuestion, context = {}) {
+    try {
+      // 1. Buscar información relevante
+      const relevantDocs = await this.searchKnowledge(userQuestion, 3);
+      
+      if (relevantDocs.length === 0) {
+        return this.getFallbackResponse(userQuestion);
+      }
 
-     // 2. Construir contexto para GPT-4
-     const knowledgeContext = relevantDocs
-       .map(doc => `**${doc.title}**\n${doc.content}`)
-       .join('\n\n---\n\n');
+      // 2. Construir contexto para GPT-4
+      const knowledgeContext = relevantDocs
+        .map(doc => `**${doc.title}**\n${doc.content}`)
+        .join('\n\n---\n\n');
 
-     // 3. Generar respuesta con GPT-4
-     const systemPrompt = `
+      // 3. Generar respuesta con GPT-4
+      const systemPrompt = `
 Eres un asistente inmobiliario experto que ayuda con preguntas sobre el proceso de venta de propiedades.
 
 CONTEXTO DE CONOCIMIENTO:
@@ -239,130 +240,130 @@ CONTEXTO ADICIONAL:
 - Es un proceso digital por WhatsApp
 `;
 
-     const response = await this.openaiClient.chat.completions.create({
-       model: openaiConfig.model,
-       messages: [
-         { role: "system", content: systemPrompt },
-         { role: "user", content: userQuestion }
-       ],
-       temperature: 0.7,
-       max_tokens: 300
-     });
+      const response = await this.openaiClient.chat.completions.create({
+        model: openaiConfig.model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userQuestion }
+        ],
+        temperature: 0.7,
+        max_tokens: 300
+      });
 
-     const answer = response.choices[0]?.message?.content || this.getFallbackResponse(userQuestion);
-     
-     logger.rag('Respuesta RAG generada exitosamente', {
-       userQuestion,
-       relevantDocsCount: relevantDocs.length,
-       answerLength: answer.length
-     });
+      const answer = response.choices[0]?.message?.content || this.getFallbackResponse(userQuestion);
+      
+      logger.rag('Respuesta RAG generada exitosamente', {
+        userQuestion,
+        relevantDocsCount: relevantDocs.length,
+        answerLength: answer.length
+      });
 
-     return answer;
+      return answer;
 
-   } catch (error) {
-     logger.error('Error al generar respuesta RAG:', {
-       userQuestion,
-       error: error.message
-     });
-     
-     return this.getFallbackResponse(userQuestion);
-   }
- }
+    } catch (error) {
+      logger.error('Error al generar respuesta RAG:', {
+        userQuestion,
+        error: error.message
+      });
+      
+      return this.getFallbackResponse(userQuestion);
+    }
+  }
 
- /**
-  * Respuesta de respaldo cuando no se puede generar una respuesta RAG
-  * @param {string} question - Pregunta del usuario
-  * @returns {string} Respuesta de respaldo
-  */
- getFallbackResponse(question) {
-   return `Entiendo tu pregunta sobre "${question}". 🤔
+  /**
+   * Respuesta de respaldo cuando no se puede generar una respuesta RAG
+   * @param {string} question - Pregunta del usuario
+   * @returns {string} Respuesta de respaldo
+   */
+  getFallbackResponse(question) {
+    return `Entiendo tu pregunta sobre "${question}". 🤔
 
 Por el momento no tengo información específica sobre ese tema, pero nuestro equipo estará encantado de ayudarte.
 
 ¿Te gustaría continuar completando la información de tu propiedad? Así podremos procesar tu solicitud más rápidamente. 📝`;
- }
+  }
 
- /**
-  * Detectar si un mensaje es una pregunta
-  * @param {string} message - Mensaje del usuario
-  * @returns {boolean} True si es una pregunta
-  */
- isQuestion(message) {
-   // Indicadores comunes de preguntas
-   const questionIndicators = [
-     '¿', '?', 'cuánto', 'cuándo', 'cómo', 'qué', 'quién', 'dónde', 'por qué',
-     'tiempo', 'demora', 'costo', 'precio', 'documento', 'necesito', 'requiere'
-   ];
+  /**
+   * Detectar si un mensaje es una pregunta
+   * @param {string} message - Mensaje del usuario
+   * @returns {boolean} True si es una pregunta
+   */
+  isQuestion(message) {
+    // Indicadores comunes de preguntas
+    const questionIndicators = [
+      '¿', '?', 'cuánto', 'cuándo', 'cómo', 'qué', 'quién', 'dónde', 'por qué',
+      'tiempo', 'demora', 'costo', 'precio', 'documento', 'necesito', 'requiere'
+    ];
 
-   const lowerMessage = message.toLowerCase();
-   return questionIndicators.some(indicator => lowerMessage.includes(indicator));
- }
+    const lowerMessage = message.toLowerCase();
+    return questionIndicators.some(indicator => lowerMessage.includes(indicator));
+  }
 
- /**
-  * Obtener estadísticas de la base de conocimiento
-  * @returns {Promise<Object>} Estadísticas
-  */
- async getKnowledgeStats() {
-   try {
-     const response = await this.weaviateClient.graphql
-       .aggregate()
-       .withClassName(this.className)
-       .withFields('meta { count }')
-       .do();
+  /**
+   * Obtener estadísticas de la base de conocimiento
+   * @returns {Promise<Object>} Estadísticas
+   */
+  async getKnowledgeStats() {
+    try {
+      const response = await this.weaviateClient.graphql
+        .aggregate()
+        .withClassName(this.className)
+        .withFields('meta { count }')
+        .do();
 
-     const count = response.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
-     
-     return {
-       totalDocuments: count,
-       className: this.className,
-       status: 'active'
-     };
+      const count = response.data?.Aggregate?.[this.className]?.[0]?.meta?.count || 0;
+      
+      return {
+        totalDocuments: count,
+        className: this.className,
+        status: 'active'
+      };
 
-   } catch (error) {
-     logger.error('Error al obtener estadísticas de conocimiento:', error);
-     return {
-       totalDocuments: 0,
-       className: this.className,
-       status: 'error'
-     };
-   }
- }
+    } catch (error) {
+      logger.error('Error al obtener estadísticas de conocimiento:', error);
+      return {
+        totalDocuments: 0,
+        className: this.className,
+        status: 'error'
+      };
+    }
+  }
 
- /**
-  * Eliminar toda la base de conocimiento (útil para pruebas)
-  */
- async clearKnowledgeBase() {
-   try {
-     await this.weaviateClient.schema
-       .classDeleter()
-       .withClassName(this.className)
-       .do();
+  /**
+   * Eliminar toda la base de conocimiento (útil para pruebas)
+   */
+  async clearKnowledgeBase() {
+    try {
+      await this.weaviateClient.schema
+        .classDeleter()
+        .withClassName(this.className)
+        .do();
 
-     logger.rag('Base de conocimiento eliminada', {
-       className: this.className
-     });
+      logger.rag('Base de conocimiento eliminada', {
+        className: this.className
+      });
 
-     return true;
-   } catch (error) {
-     logger.error('Error al eliminar base de conocimiento:', error);
-     return false;
-   }
- }
+      return true;
+    } catch (error) {
+      logger.error('Error al eliminar base de conocimiento:', error);
+      return false;
+    }
+  }
 
- /**
-  * Verificar conectividad con Weaviate
-  * @returns {Promise<boolean>} Estado de conexión
-  */
- async checkConnection() {
-   try {
-     await this.weaviateClient.misc.metaGetter().do();
-     logger.rag('Conexión con Weaviate verificada exitosamente');
-     return true;
-   } catch (error) {
-     logger.error('Error de conexión con Weaviate:', error);
-     return false;
-   }
- }
+  /**
+   * Verificar conectividad con Weaviate
+   * @returns {Promise<boolean>} Estado de conexión
+   */
+  async checkConnection() {
+    try {
+      await this.weaviateClient.misc.metaGetter().do();
+      logger.rag('Conexión con Weaviate verificada exitosamente');
+      return true;
+    } catch (error) {
+      logger.error('Error de conexión con Weaviate:', error);
+      return false;
+    }
+  }
 }
 
 // Crear instancia singleton

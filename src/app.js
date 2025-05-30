@@ -276,13 +276,19 @@ class App {
         logger.warn('No se pudo conectar al servicio RAG');
       }
 
-      // Validar configuración de WhatsApp
+      // Validar configuración de WhatsApp - CORRECCIÓN AQUÍ
       const { default: whatsappService } = await import('./services/whatsappService.js');
-      const whatsappValid = await whatsappService.validateService();
-      if (whatsappValid) {
+      const whatsappResult = await whatsappService.validateService();
+      
+      // VERIFICAR EL RESULTADO CORRECTAMENTE
+      if (whatsappResult && whatsappResult.accountStatus && whatsappResult.accountStatus.status === 'authenticated') {
+        logger.info('Servicio WhatsApp validado exitosamente');
+      } else if (whatsappResult === true) {
+        // Si validateService() retorna true directamente
         logger.info('Servicio WhatsApp validado exitosamente');
       } else {
         logger.warn('Servicio WhatsApp no está disponible');
+        logger.debug('Resultado de validación WhatsApp:', whatsappResult);
       }
 
       // Validar configuración de email

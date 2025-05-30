@@ -15,6 +15,13 @@ class WebhookController {
    */
   async handleUltraMSGWebhook(req, res) {
     try {
+      // LOGS DE DEBUG PARA WHATSAPP REAL
+      console.log('🔥 WEBHOOK RECIBIDO DE ULTRAMSG:');
+      console.log('📱 Body:', JSON.stringify(req.body, null, 2));
+      console.log('📱 Headers:', JSON.stringify(req.headers, null, 2));
+      console.log('📱 Method:', req.method);
+      console.log('📱 URL:', req.originalUrl);
+      
       logger.whatsapp('Webhook recibido de UltraMSG', {
         body: req.body,
         headers: req.headers
@@ -23,14 +30,20 @@ class WebhookController {
       const { data } = req.body;
       
       if (!data) {
+        console.log('❌ No hay data en el webhook');
         return res.status(400).json({
           success: false,
           error: 'Datos de webhook inválidos'
         });
       }
 
+      console.log('📝 Tipo de mensaje:', data.type);
+      console.log('📝 De:', data.from);
+      console.log('📝 Contenido:', data.body || data.text);
+
       // Verificar que es un mensaje entrante (no enviado por el bot)
       if (data.type === 'sent') {
+        console.log('🤖 Mensaje enviado por el bot, ignorando');
         logger.whatsapp('Mensaje enviado por el bot, ignorando webhook');
         return res.status(200).json({ success: true, message: 'Mensaje enviado ignorado' });
       }
@@ -39,28 +52,37 @@ class WebhookController {
       const messageData = this.extractMessageData(data);
       
       if (!messageData) {
+        console.log('❌ Tipo de mensaje no soportado:', data.type);
         logger.whatsapp('Tipo de mensaje no soportado', { type: data.type });
         return res.status(200).json({ success: true, message: 'Tipo de mensaje no soportado' });
       }
+
+      console.log('✅ Datos del mensaje extraídos:', messageData);
 
       // Procesar mensaje según su tipo
       let result;
       switch (messageData.type) {
         case 'text':
+          console.log('📝 Procesando mensaje de texto...');
           result = await this.processTextMessage(messageData);
           break;
         case 'document':
         case 'image':
+          console.log('📎 Procesando documento/imagen...');
           result = await this.processDocumentMessage(messageData);
           break;
         case 'audio':
         case 'video':
+          console.log('🎵 Procesando audio/video...');
           result = await this.processMediaMessage(messageData);
           break;
         default:
+          console.log('❌ Tipo de mensaje no manejado:', messageData.type);
           logger.whatsapp('Tipo de mensaje no manejado', { type: messageData.type });
           return res.status(200).json({ success: true, message: 'Tipo de mensaje no manejado' });
       }
+
+      console.log('🎯 Resultado del procesamiento:', result);
 
       logger.whatsapp('Mensaje procesado exitosamente', {
         whatsappNumber: messageData.from,
@@ -75,8 +97,10 @@ class WebhookController {
       });
 
     } catch (error) {
+      console.error('💥 ERROR EN WEBHOOK:', error);
       logger.error('Error al procesar webhook de UltraMSG:', {
         error: error.message,
+        stack: error.stack,
         body: req.body
       });
 
@@ -94,6 +118,8 @@ class WebhookController {
    */
   extractMessageData(data) {
     try {
+      console.log('🔍 Extrayendo datos del mensaje:', data);
+      
       // Estructura común para todos los tipos de mensaje
       const baseData = {
         id: data.id,
@@ -102,14 +128,18 @@ class WebhookController {
         chatId: data.chatId
       };
 
+      console.log('📋 Base data:', baseData);
+
       switch (data.type) {
         case 'text':
-          return {
+          const textData = {
             ...baseData,
             type: 'text',
             message: data.body || data.text,
             metadata: {}
           };
+          console.log('📝 Datos de texto extraídos:', textData);
+          return textData;
 
         case 'document':
           return {
@@ -166,10 +196,12 @@ class WebhookController {
           };
 
         default:
+          console.log('❌ Tipo de mensaje desconocido:', data.type);
           return null;
       }
 
     } catch (error) {
+      console.error('💥 Error al extraer datos del mensaje:', error);
       logger.error('Error al extraer datos del mensaje:', error);
       return null;
     }
@@ -182,11 +214,15 @@ class WebhookController {
    */
   async processTextMessage(messageData) {
     try {
+      console.log('🧠 Enviando a conversationManager:', messageData);
+      
       const result = await conversationManager.processUserMessage(
         messageData.from,
         messageData.message,
         messageData.metadata
       );
+
+      console.log('✅ Resultado de conversationManager:', result);
 
       return {
         success: true,
@@ -195,6 +231,7 @@ class WebhookController {
       };
 
     } catch (error) {
+      console.error('💥 Error al procesar mensaje de texto:', error);
       logger.error('Error al procesar mensaje de texto:', error);
       return {
         success: false,
@@ -491,11 +528,20 @@ class WebhookController {
    */
   async testWebhook(req, res) {
     try {
+      console.log('🧪 TEST WEBHOOK EJECUTADO');
+      console.log('📱 Body:', JSON.stringify(req.body, null, 2));
+      
       logger.whatsapp('Test de webhook ejecutado', {
         method: req.method,
         headers: req.headers,
         body: req.body
       });
+
+      // Si tiene estructura de webhook real, procesarlo
+      if (req.body.data) {
+        console.log('🔄 Procesando como webhook real...');
+        return this.handleUltraMSGWebhook(req, res);
+      }
 
       return res.status(200).json({
         success: true,

@@ -153,26 +153,37 @@ class Server {
       logger.info('Ejecutando tareas de inicialización...');
 
       // Limpiar conversaciones expiradas
-      const { default: conversationManager } = await import('./core/conversationManager.js');
-      const cleanedConversations = await conversationManager.cleanupExpiredConversations();
-      if (cleanedConversations > 0) {
-        logger.info(`Conversaciones expiradas limpiadas: ${cleanedConversations}`);
+      try {
+        const { default: conversationManager } = await import('./core/conversationManager.js');
+        const cleanedConversations = await conversationManager.cleanupExpiredConversations();
+        if (cleanedConversations > 0) {
+          logger.info(`Conversaciones expiradas limpiadas: ${cleanedConversations}`);
+        }
+      } catch (error) {
+        logger.warn('Error al limpiar conversaciones expiradas:', error.message);
       }
 
       // Limpiar archivos temporales
-      const { default: documentService } = await import('./services/documentService.js');
-      const cleanedFiles = await documentService.cleanupTempFiles(24);
-      if (cleanedFiles > 0) {
-        logger.info(`Archivos temporales limpiados: ${cleanedFiles}`);
+      try {
+        const { default: documentService } = await import('./services/documentService.js');
+        const cleanedFiles = await documentService.cleanupTempFiles(24);
+        if (cleanedFiles > 0) {
+          logger.info(`Archivos temporales limpiados: ${cleanedFiles}`);
+        }
+      } catch (error) {
+        logger.warn('Error al limpiar archivos temporales:', error.message);
       }
 
       // Cargar base de conocimiento RAG si está vacía
-      const { default: ragService } = await import('./services/ragService.js');
-      const ragStats = await ragService.getKnowledgeStats();
-      if (ragStats.totalDocuments === 0) {
-        logger.info('Base de conocimiento RAG vacía, cargando datos iniciales...');
-        // Aquí se puede cargar datos iniciales si es necesario
-        // await this.loadInitialKnowledgeBase();
+      try {
+        const { default: ragService } = await import('./services/ragService.js');
+        const ragStats = await ragService.getKnowledgeStats();
+        if (ragStats.totalDocuments === 0) {
+          logger.info('Base de conocimiento RAG vacía, cargando datos iniciales...');
+          await this.loadInitialKnowledgeBase();
+        }
+      } catch (error) {
+        logger.warn('Error al verificar base de conocimiento RAG:', error.message);
       }
 
       // Programar tareas recurrentes
@@ -213,117 +224,123 @@ class Server {
         }
       } catch (error) {
         logger.error('Error en tarea de limpieza de archivos:', error);
-     }
-   }, 6 * 60 * 60 * 1000); // Cada 6 horas
+      }
+    }, 6 * 60 * 60 * 1000); // Cada 6 horas
 
-   // Log de estadísticas del sistema cada 30 minutos
-   setInterval(async () => {
-     try {
-       const stats = {
-         uptime: process.uptime(),
-         memory: process.memoryUsage(),
-         cpu: process.cpuUsage(),
-         timestamp: new Date().toISOString()
-       };
+    // Log de estadísticas del sistema cada 30 minutos
+    setInterval(async () => {
+      try {
+        const stats = {
+          uptime: process.uptime(),
+          memory: process.memoryUsage(),
+          cpu: process.cpuUsage(),
+          timestamp: new Date().toISOString()
+        };
 
-       logger.info('Estadísticas del sistema:', {
-         uptime: `${Math.floor(stats.uptime / 3600)}h ${Math.floor((stats.uptime % 3600) / 60)}m`,
-         memoryUsed: `${Math.round(stats.memory.heapUsed / 1024 / 1024)}MB`,
-         memoryTotal: `${Math.round(stats.memory.heapTotal / 1024 / 1024)}MB`
-       });
+        logger.info('Estadísticas del sistema:', {
+          uptime: `${Math.floor(stats.uptime / 3600)}h ${Math.floor((stats.uptime % 3600) / 60)}m`,
+          memoryUsed: `${Math.round(stats.memory.heapUsed / 1024 / 1024)}MB`,
+          memoryTotal: `${Math.round(stats.memory.heapTotal / 1024 / 1024)}MB`
+        });
 
-     } catch (error) {
-       logger.error('Error en tarea de estadísticas:', error);
-     }
-   }, 30 * 60 * 1000); // Cada 30 minutos
+      } catch (error) {
+        logger.error('Error en tarea de estadísticas:', error);
+      }
+    }, 30 * 60 * 1000); // Cada 30 minutos
 
-   logger.info('Tareas recurrentes programadas');
- }
+    logger.info('Tareas recurrentes programadas');
+  }
 
- /**
-  * Cargar base de conocimiento inicial (opcional)
-  */
- async loadInitialKnowledgeBase() {
-   try {
-     const { default: ragService } = await import('./services/ragService.js');
-     
-     // Datos iniciales básicos sobre el proceso inmobiliario
-     const initialKnowledge = [
-       {
-         title: "Tiempo de proceso",
-         content: "El proceso completo de registro y verificación toma entre 3-5 días hábiles: Revisión de documentos (24 horas), Verificación de antecedentes (2-3 días), Publicación una vez aprobado.",
-         category: "proceso",
-         tags: ["tiempo", "proceso", "verificacion"],
-         source: "manual"
-       },
-       {
-         title: "Documentos requeridos",
-         content: "Se requieren los siguientes documentos: Certificado de Existencia y Representación Legal (obligatorio), Escritura Pública, Paz y Salvo de Administración (si aplica), Recibo de Servicios Públicos, Certificado de Tradición y Libertad, y mínimo 5 fotos del inmueble.",
-         category: "documentos",
-         tags: ["documentos", "requisitos", "certificados"],
-         source: "manual"
-       },
-       {
-         title: "Información requerida",
-         content: "Necesitamos información completa sobre: características físicas (tipo, área, habitaciones, baños, parqueaderos, piso, estrato), información comercial (precio, negociabilidad, motivo de venta), y descripción detallada de mínimo 50 palabras.",
-         category: "informacion",
-         tags: ["informacion", "caracteristicas", "descripcion"],
-         source: "manual"
-       },
-       {
-         title: "Precios y costos",
-         content: "El registro en nuestra plataforma no tiene costo inicial. Las comisiones se aplican únicamente cuando se concrete la venta de la propiedad. Los precios deben estar en pesos colombianos.",
-         category: "precios",
-         tags: ["precios", "costos", "comisiones"],
-         source: "manual"
-       },
-       {
-         title: "Soporte y contacto",
-         content: "Nuestro equipo de soporte está disponible de lunes a viernes de 8:00 AM a 6:00 PM. Puedes contactarnos por WhatsApp durante el proceso de registro o por email para consultas adicionales.",
-         category: "soporte",
-         tags: ["soporte", "contacto", "horarios"],
-         source: "manual"
-       }
-     ];
+  /**
+   * Cargar base de conocimiento inicial (opcional)
+   */
+  async loadInitialKnowledgeBase() {
+    try {
+      const { default: ragService } = await import('./services/ragService.js');
+      
+      // Datos iniciales básicos sobre el proceso inmobiliario
+      const initialKnowledge = [
+        {
+          title: "Tiempo de proceso",
+          content: "El proceso completo de registro y verificación toma entre 3-5 días hábiles: Revisión de documentos (24 horas), Verificación de antecedentes (2-3 días), Publicación una vez aprobado.",
+          category: "proceso",
+          tags: ["tiempo", "proceso", "verificacion"],
+          source: "manual"
+        },
+        {
+          title: "Documentos requeridos",
+          content: "Se requieren los siguientes documentos: Certificado de Existencia y Representación Legal (obligatorio), Escritura Pública, Paz y Salvo de Administración (si aplica), Recibo de Servicios Públicos, Certificado de Tradición y Libertad, y mínimo 5 fotos del inmueble.",
+          category: "documentos",
+          tags: ["documentos", "requisitos", "certificados"],
+          source: "manual"
+        },
+        {
+          title: "Información requerida",
+          content: "Necesitamos información completa sobre: características físicas (tipo, área, habitaciones, baños, parqueaderos, piso, estrato), información comercial (precio, negociabilidad, motivo de venta), y descripción detallada de mínimo 50 palabras.",
+          category: "informacion",
+          tags: ["informacion", "caracteristicas", "descripcion"],
+          source: "manual"
+        },
+        {
+          title: "Precios y costos",
+          content: "El registro en nuestra plataforma no tiene costo inicial. Las comisiones se aplican únicamente cuando se concrete la venta de la propiedad. Los precios deben estar en pesos colombianos.",
+          category: "precios",
+          tags: ["precios", "costos", "comisiones"],
+          source: "manual"
+        },
+        {
+          title: "Soporte y contacto",
+          content: "Nuestro equipo de soporte está disponible de lunes a viernes de 8:00 AM a 6:00 PM. Puedes contactarnos por WhatsApp durante el proceso de registro o por email para consultas adicionales.",
+          category: "soporte",
+          tags: ["soporte", "contacto", "horarios"],
+          source: "manual"
+        }
+      ];
 
-     await ragService.loadKnowledgeBase(initialKnowledge);
-     logger.info('Base de conocimiento inicial cargada exitosamente');
+      await ragService.loadKnowledgeBase(initialKnowledge);
+      logger.info('Base de conocimiento inicial cargada exitosamente');
 
-   } catch (error) {
-     logger.error('Error al cargar base de conocimiento inicial:', error);
-   }
- }
+    } catch (error) {
+      logger.error('Error al cargar base de conocimiento inicial:', error);
+    }
+  }
 
- /**
-  * Detener servidor gracefully
-  */
- async stop() {
-   return new Promise((resolve) => {
-     if (this.server) {
-       this.server.close(resolve);
-     } else {
-       resolve();
-     }
-   });
- }
+  /**
+   * Detener servidor gracefully
+   */
+  async stop() {
+    return new Promise((resolve) => {
+      if (this.server) {
+        this.server.close(resolve);
+      } else {
+        resolve();
+      }
+    });
+  }
 }
 
 // Función principal para iniciar el servidor
 async function startServer() {
- try {
-   const server = new Server();
-   await server.start();
-   
-   return server;
- } catch (error) {
-   logger.error('Error fatal al iniciar servidor:', error);
-   process.exit(1);
- }
+  try {
+    const server = new Server();
+    await server.start();
+    
+    return server;
+  } catch (error) {
+    logger.error('Error fatal al iniciar servidor:', error);
+    process.exit(1);
+  }
 }
 
-// Iniciar servidor solo si este archivo es ejecutado directamente
-if (import.meta.url === `file://${process.argv[1]}`) {
- startServer();
+// MODIFICACIÓN CLAVE: Verificar si este archivo es ejecutado directamente
+const isMainModule = process.argv[1] && process.argv[1].endsWith('server.js');
+
+if (isMainModule) {
+  console.log('🚀 Iniciando servidor principal...');
+  startServer().catch(error => {
+    console.error('💥 Error fatal al iniciar:', error);
+    process.exit(1);
+  });
 }
 
 export default startServer;
