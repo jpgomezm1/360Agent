@@ -112,100 +112,121 @@ class WebhookController {
   }
 
   /**
-   * Extraer datos del mensaje desde el webhook
-   * @param {Object} data - Datos del webhook
-   * @returns {Object|null} Datos del mensaje extraídos
-   */
-  extractMessageData(data) {
-    try {
-      console.log('🔍 Extrayendo datos del mensaje:', data);
-      
-      // Estructura común para todos los tipos de mensaje
-      const baseData = {
-        id: data.id,
-        from: data.from,
-        timestamp: data.timestamp || Date.now(),
-        chatId: data.chatId
-      };
+ * Extraer datos del mensaje desde el webhook
+ * @param {Object} data - Datos del webhook
+ * @returns {Object|null} Datos del mensaje extraídos
+ */
+extractMessageData(data) {
+  try {
+    console.log('🔍 Extrayendo datos del mensaje:', data);
+    
+    // Estructura común para todos los tipos de mensaje
+    const baseData = {
+      id: data.id,
+      from: data.from,
+      timestamp: data.timestamp || data.time || Date.now(),
+      chatId: data.chatId || data.from
+    };
 
-      console.log('📋 Base data:', baseData);
+    console.log('📋 Base data:', baseData);
 
-      switch (data.type) {
-        case 'text':
-          const textData = {
-            ...baseData,
-            type: 'text',
-            message: data.body || data.text,
-            metadata: {}
-          };
-          console.log('📝 Datos de texto extraídos:', textData);
-          return textData;
+    switch (data.type) {
+      case 'chat':
+        // UltraMSG envía tipo "chat" para mensajes de texto
+        const chatData = {
+          ...baseData,
+          type: 'text', // Convertir a text para procesamiento interno
+          message: data.body || data.text,
+          metadata: {
+            pushname: data.pushname,
+            fromMe: data.fromMe,
+            isForwarded: data.isForwarded,
+            originalType: 'chat'
+          }
+        };
+        console.log('💬 Datos de chat (UltraMSG) extraídos:', chatData);
+        return chatData;
 
-        case 'document':
-          return {
-            ...baseData,
-            type: 'document',
-            message: data.caption || 'Documento recibido',
-            metadata: {
-              filename: data.filename,
-              url: data.body,
-              mimeType: data.mimetype,
-              size: data.size
-            }
-          };
+      case 'text':
+        const textData = {
+          ...baseData,
+          type: 'text',
+          message: data.body || data.text,
+          metadata: {}
+        };
+        console.log('📝 Datos de texto extraídos:', textData);
+        return textData;
 
-        case 'image':
-          return {
-            ...baseData,
-            type: 'image',
-            message: data.caption || 'Imagen recibida',
-            metadata: {
-              filename: data.filename || `image_${Date.now()}.jpg`,
-              url: data.body,
-              mimeType: data.mimetype || 'image/jpeg',
-              size: data.size
-            }
-          };
+      case 'document':
+        return {
+          ...baseData,
+          type: 'document',
+          message: data.caption || 'Documento recibido',
+          metadata: {
+            filename: data.filename,
+            url: data.body,
+            mimeType: data.mimetype,
+            size: data.size
+          }
+        };
 
-        case 'audio':
-          return {
-            ...baseData,
-            type: 'audio',
-            message: 'Audio recibido (no procesado automáticamente)',
-            metadata: {
-              filename: data.filename || `audio_${Date.now()}.ogg`,
-              url: data.body,
-              mimeType: data.mimetype,
-              duration: data.duration,
-              size: data.size
-            }
-          };
+      case 'image':
+        return {
+          ...baseData,
+          type: 'image',
+          message: data.caption || 'Imagen recibida',
+          metadata: {
+            filename: data.filename || `image_${Date.now()}.jpg`,
+            url: data.body,
+            mimeType: data.mimetype || 'image/jpeg',
+            size: data.size
+          }
+        };
 
-        case 'video':
-          return {
-            ...baseData,
-            type: 'video',
-            message: data.caption || 'Video recibido (no procesado automáticamente)',
-            metadata: {
-              filename: data.filename || `video_${Date.now()}.mp4`,
-              url: data.body,
-              mimeType: data.mimetype,
-              duration: data.duration,
-              size: data.size
-            }
-          };
+      case 'audio':
+        return {
+          ...baseData,
+          type: 'audio',
+          message: 'Audio recibido (no procesado automáticamente)',
+          metadata: {
+            filename: data.filename || `audio_${Date.now()}.ogg`,
+            url: data.body,
+            mimeType: data.mimetype,
+            duration: data.duration,
+            size: data.size
+          }
+        };
 
-        default:
-          console.log('❌ Tipo de mensaje desconocido:', data.type);
-          return null;
-      }
+      case 'video':
+        return {
+          ...baseData,
+          type: 'video',
+          message: data.caption || 'Video recibido (no procesado automáticamente)',
+          metadata: {
+            filename: data.filename || `video_${Date.now()}.mp4`,
+            url: data.body,
+            mimeType: data.mimetype,
+            duration: data.duration,
+            size: data.size
+          }
+        };
 
-    } catch (error) {
-      console.error('💥 Error al extraer datos del mensaje:', error);
-      logger.error('Error al extraer datos del mensaje:', error);
-      return null;
+      case 'sent':
+        // Mensaje enviado por el bot - ignorar
+        console.log('🤖 Mensaje enviado por el bot, ignorando');
+        return null;
+
+      default:
+        console.log('❌ Tipo de mensaje desconocido:', data.type);
+        return null;
     }
+
+  } catch (error) {
+    console.error('💥 Error al extraer datos del mensaje:', error);
+    logger.error('Error al extraer datos del mensaje:', error);
+    return null;
   }
+}
 
   /**
    * Procesar mensaje de texto

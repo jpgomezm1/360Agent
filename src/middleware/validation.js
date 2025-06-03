@@ -161,19 +161,29 @@ export const systemLogsQuerySchema = Joi.object({
   to: Joi.string().isoDate().optional()
 });
 
-// Schema para webhook de UltraMSG
+// Schema para webhook de UltraMSG - ACTUALIZADO PARA SOPORTAR "chat"
 export const ultramsgWebhookSchema = Joi.object({
+  event_type: Joi.string().optional(), // UltraMSG incluye esto
+  instanceId: Joi.string().optional(),
+  id: Joi.alternatives().try(Joi.string(), Joi.number()).optional(),
+  referenceId: Joi.string().optional(),
+  hash: Joi.string().optional(),
   data: Joi.object({
     id: Joi.string().required(),
-    type: Joi.string().valid('text', 'image', 'document', 'audio', 'video', 'sent').required(),
+    type: Joi.string().valid('text', 'image', 'document', 'audio', 'video', 'sent', 'chat').required(),
     from: Joi.string().required(),
+    to: Joi.string().optional(), // UltraMSG incluye esto
+    author: Joi.string().optional(),
+    pushname: Joi.string().optional(),
+    ack: Joi.string().optional(),
     timestamp: Joi.number().optional(),
+    time: Joi.number().optional(), // UltraMSG usa "time" en lugar de "timestamp"
     chatId: Joi.string().optional(),
     
     // Para mensajes de texto
     body: Joi.string().when('type', {
-      is: 'text',
-      then: Joi.required(),
+      is: Joi.string().valid('text', 'chat'),
+      then: Joi.optional(), // Hacer opcional para mayor flexibilidad
       otherwise: Joi.optional()
     }),
     
@@ -183,13 +193,22 @@ export const ultramsgWebhookSchema = Joi.object({
     filename: Joi.string().when('type', {
       is: Joi.string().valid('document', 'image', 'audio', 'video'),
       then: Joi.optional(),
-      otherwise: Joi.forbidden()
+      otherwise: Joi.optional()
     }),
     
     caption: Joi.string().optional(),
     mimetype: Joi.string().optional(),
     size: Joi.number().integer().optional(),
-    duration: Joi.number().optional()
+    duration: Joi.number().optional(),
+    media: Joi.string().optional(),
+    
+    // Campos adicionales de UltraMSG
+    fromMe: Joi.boolean().optional(),
+    self: Joi.boolean().optional(),
+    isForwarded: Joi.boolean().optional(),
+    isMentioned: Joi.boolean().optional(),
+    quotedMsg: Joi.object().optional(),
+    mentionedIds: Joi.array().optional()
     
   }).required()
 });
@@ -309,6 +328,19 @@ export function sanitizeInput(req, res, next) {
  * @returns {Function} Middleware de Express
  */
 export function createRateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000) {
+  // En desarrollo, desactivar rate limiting para evitar problemas con trust proxy
+  if (process.env.NODE_ENV === 'development') {
+    return (req, res, next) => {
+      // Agregar headers informativos pero no bloquear
+      res.set({
+        'X-RateLimit-Limit': maxRequests,
+        'X-RateLimit-Remaining': maxRequests,
+        'X-RateLimit-Reset': new Date(Date.now() + windowMs).toISOString()
+      });
+      next();
+    };
+  }
+
   const requests = new Map();
 
   return (req, res, next) => {

@@ -322,8 +322,6 @@ class SimulatorController {
       direccion_inmueble: formData.direccion_inmueble.trim(),
       matricula_inmobiliaria: formData.matricula_inmobiliaria.trim(),
       
-      // Metadata
-      timestamp: formData.timestamp || new Date().toISOString()
     };
   }
 
